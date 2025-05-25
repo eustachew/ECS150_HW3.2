@@ -16,6 +16,11 @@ struct superblock{
 	uint8_t numFATBlocks;
 };
 
+struct openFile{
+	int fileDescriptor;
+	int offset;
+};
+
 struct superblock Block;
 
 int fs_mount(const char *diskname)
@@ -136,6 +141,7 @@ int fs_ls(void)
 int fs_open(const char *filename)
 {
 	/* TODO: Phase 3 */
+
 }
 
 int fs_close(int fd)
