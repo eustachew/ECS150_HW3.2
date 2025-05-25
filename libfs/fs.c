@@ -21,6 +21,8 @@ struct openFile{
 	int offset;
 };
 
+struct openFile fdArray[FS_OPEN_MAX_COUNT];
+
 struct superblock Block;
 
 int fs_mount(const char *diskname)
