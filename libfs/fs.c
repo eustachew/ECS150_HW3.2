@@ -17,8 +17,11 @@ struct superblock{
 };
 
 struct openFile{
+	char filename;
 	int fileDescriptor;
 	int offset;
+	int fileDataIndex;
+	int fileSize;
 };
 
 struct openFile fdArray[FS_OPEN_MAX_COUNT];
@@ -98,7 +101,7 @@ int fs_info(void)
 	
 	//Reading root directory block into buffer, and seeing how many root directory entries are free
 	if(block_read(Block.rootIndex, buffer) != 0){
-		return 0;
+		return -1;
 	}
 
 	offset = 0;
@@ -143,6 +146,28 @@ int fs_ls(void)
 int fs_open(const char *filename)
 {
 	/* TODO: Phase 3 */
+	uint8_t buffer[BLOCK_SIZE];
+	uint8_t rootEntry[32];
+	int offset = 0;
+
+	if(block_read(Block.rootIndex, buffer) != 0){
+		return -1;
+	}
+
+	while(offset < BLOCK_SIZE){
+		memcpy(rootEntry, buffer + offset, 16); //Read the root directory entry
+		if(*rootEntry == filename){
+			struct openFile newFile;
+			memcpy(newFile.fileSize, buffer + offset + 16, 4);
+			memcpy(newFile.fileDataIndex, buffer + offset + 20, 2);
+			newFile.filename = filename;
+			newFile.offset = 0;
+			newFile.fileDescriptor = offset / 32; //set the fd value as index of file in FAT array
+			return 0;
+		}
+		offset += 32; //offset to the next 32 bytes, since each root directory entry is 32 bytes
+	}
+	return -1;
 
 }
 
