@@ -3,9 +3,14 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 
 #include "disk.h"
 #include "fs.h"
+
+#define FAT_EOC 0xFFFF
+
+bool mounted = false;
 
 struct superblock{
 	char signature[9]; //8 bytes for the signature, plus extra byte for null terminator
@@ -62,6 +67,7 @@ int fs_mount(const char *diskname)
 	if(Block.rootIndex != Block.numFATBlocks + 1 || Block.dataIndex != Block.rootIndex + 1){
 		return -1;
 	}
+	mounted = true;
 	return 0;
 }
 
@@ -71,7 +77,7 @@ int fs_umount(void)
 	if(block_disk_close() != 0){
 		return -1;
 	}
-	
+	mounted = false;
 	return 0;
 }
 
@@ -131,6 +137,14 @@ int fs_info(void)
 int fs_create(const char *filename)
 {
 	/* TODO: Phase 2 */
+	// Check if FS is mounted
+	if(!mounted){
+		return -1;
+	}
+	// Check if filename is null-terminated
+	// Check if filename exceeds FS_FILENAME_LEN
+	// Check if filename already in root directory
+	// Check if there is empty entry. If there is, update that entry with filename
 }
 
 int fs_delete(const char *filename)
@@ -140,7 +154,35 @@ int fs_delete(const char *filename)
 
 int fs_ls(void)
 {
-	/* TODO: Phase 2 */
+	// Check if FS is mounted
+	if(!mounted){
+		return -1;
+	}
+
+	// loop through root directory and if filename != '\0', print file info
+	uint8_t buffer[BLOCK_SIZE];
+	uint8_t rootEntry[32];
+	char filename[16];
+	uint32_t filesize;
+	uint16_t fileindex;
+	int offset = 0;
+
+	if(block_read(Block.rootIndex, buffer) != 0){
+		return -1;
+	}
+	
+	printf("FS Ls:\n");
+	while(offset < BLOCK_SIZE){
+		memcpy(rootEntry, buffer + offset, 32);
+		if(rootEntry[0] != '\0'){
+			memcpy(filename, rootEntry, 16);
+			memcpy(&filesize, rootEntry + 16, 4);
+			memcpy(&fileindex, rootEntry + 20, 2);
+			printf("file: %s, size: %u, data_blk: %u\n", filename, filesize, fileindex);
+		}
+		offset += 32; //offset to the next 32 bytes, since each root directory entry is 32 bytes
+	}
+	return 0;
 }
 
 int fs_open(const char *filename)
