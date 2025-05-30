@@ -22,11 +22,9 @@ struct superblock{
 };
 
 struct openFile{
-	char filename;
-	int fileDescriptor;
-	int offset;
-	int fileDataIndex;
-	int fileSize;
+	char filename[16];
+	int32_t offset;
+	int32_t fileSize;
 };
 
 struct openFile fdArray[FS_OPEN_MAX_COUNT];
@@ -68,6 +66,11 @@ int fs_mount(const char *diskname)
 		return -1;
 	}
 	mounted = true;
+
+	//initialize the file descriptor array for later use when opening and closing files
+	for (int i = 0; i < FS_OPEN_MAX_COUNT; i++) {
+		fdArray[i].fileSize = -1;
+	}
 	return 0;
 }
 
@@ -198,34 +201,72 @@ int fs_open(const char *filename)
 
 	while(offset < BLOCK_SIZE){
 		memcpy(rootEntry, buffer + offset, 16); //Read the root directory entry
-		if(*rootEntry == filename){
+		if(strcmp(rootEntry, filename) == 0){ //find the directory entry that corresponds to th file that we are trying to open
 			struct openFile newFile;
-			memcpy(newFile.fileSize, buffer + offset + 16, 4);
-			memcpy(newFile.fileDataIndex, buffer + offset + 20, 2);
-			newFile.filename = filename;
-			newFile.offset = 0;
-			newFile.fileDescriptor = offset / 32; //set the fd value as index of file in FAT array
-			return 0;
+			memcpy(newFile.fileSize, buffer + offset + 16, 4); //copy the "file size" section of the entry into the struct
+			strcpy(newFile.filename, filename);  
+			newFile.offset = 0; //initial offset for a newly opened filed is 0
+
+			for(int i = 0; i < FS_OPEN_MAX_COUNT; i++){  //find the first open entry in the fd array to assign fd
+				if(fdArray[i].fileSize == -1){ //check to see if the entry is unused, if so then fill it in with the corresponding info
+					fdArray[i] = newFile;
+					return i; //return the fd value
+				}
+			}
 		}
 		offset += 32; //offset to the next 32 bytes, since each root directory entry is 32 bytes
 	}
-	return -1;
-
+	return -1;  //file was never found or fd array was already full
 }
 
 int fs_close(int fd)
 {
+	if(fd > 31 || fd < 0){ //invalid fd value
+		return -1;
+	}
+	if(fdArray[fd].fileSize == -1){ //fd entry has no corresponding file
+		return -1;
+	}
+	else if(fdArray[fd].fileSize != -1){
+		struct openFile emptyFile;
+		fdArray[fd] = emptyFile;	//reseting the entry
+		fdArray[fd].fileSize = -1; //making sure the values are resetted
+		fdArray[fd].offset = 0;
+	}
+	
+	return 0;
 	/* TODO: Phase 3 */
 }
 
 int fs_stat(int fd)
 {
 	/* TODO: Phase 3 */
+	if(fd > 31 || fd < 0){ //invalid fd value
+		return -1;
+	}
+	if(fdArray[fd].fileSize == -1){ //fd entry has no corresponding file
+		return -1;
+	}
+	
+	return fdArray[fd].fileSize;
+
 }
 
 int fs_lseek(int fd, size_t offset)
 {
 	/* TODO: Phase 3 */
+	if(fd > 31 || fd < 0){ //invalid fd value
+		return -1;
+	}
+	if(fdArray[fd].fileSize == -1){ //fd entry has no corresponding file
+		return -1;
+	}
+	if(offset > fdArray[fd].fileSize){
+		return -1;
+	}
+
+	fdArray[fd].offset += offset;
+	return 0;
 }
 
 int fs_write(int fd, void *buf, size_t count)
