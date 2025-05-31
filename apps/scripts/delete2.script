@@ -1,0 +1,6 @@
+MOUNT
+CREATE	file_fs
+CREATE  y
+DELETE	file_fs
+DELETE  y
+UMOUNT

@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # make fresh virtual disk
-./fs_make.x disk.fs 4096
+./fs_make.x disk.fs 4096 > /dev/null 2>&1
 
 # get fs_info from reference lib
 ./fs_ref.x info disk.fs >ref.stdout 2>ref.stderr
@@ -37,21 +37,21 @@ rm disk.fs
 rm ref.stdout ref.stderr
 rm lib.stdout lib.stderr
 
-# ls testing
-./fs_make.x empty.fs 8192
+# fs_ls testing
+./fs_make.x empty.fs 8192 > /dev/null 2>&1
 
-./fs_make.x add_1.fs 2048
-./fs_ref.x add add_1.fs simple_reader.c
+./fs_make.x add_1.fs 2048 > /dev/null 2>&1
+./fs_ref.x add add_1.fs simple_reader.c > /dev/null 2>&1
 
-./fs_make.x add_2.fs 4096
-./fs_ref.x add add_2.fs simple_reader.c
-./fs_ref.x add add_2.fs test_fs.c
+./fs_make.x add_2.fs 4096 > /dev/null 2>&1
+./fs_ref.x add add_2.fs simple_reader.c > /dev/null 2>&1
+./fs_ref.x add add_2.fs test_fs.c > /dev/null 2>&1
 
-./fs_make.x add_3_rm_1.fs 7420
-./fs_ref.x add add_3_rm_1.fs simple_reader.c
-./fs_ref.x add add_3_rm_1.fs test_fs.c
-./fs_ref.x add add_3_rm_1.fs Makefile
-./fs_ref.x rm add_3_rm_1.fs test_fs.c
+./fs_make.x add_3_rm_1.fs 7420 > /dev/null 2>&1
+./fs_ref.x add add_3_rm_1.fs simple_reader.c > /dev/null 2>&1
+./fs_ref.x add add_3_rm_1.fs test_fs.c > /dev/null 2>&1
+./fs_ref.x add add_3_rm_1.fs Makefile > /dev/null 2>&1
+./fs_ref.x rm add_3_rm_1.fs test_fs.c > /dev/null 2>&1
 
 for fs in *.fs; do
     echo "Running ls diff $fs"
@@ -62,4 +62,70 @@ done
 
 # clean
 rm empty.fs add_1.fs add_2.fs add_3_rm_1.fs
+rm ref_output my_output
+
+# test fs_create
+echo "Running create.script"
+dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
+./fs_make.x test.fs 100 > /dev/null 2>&1
+./test_fs.x script test.fs scripts/create.script > /dev/null 2>&1
+./fs_ref.x ls test.fs > my_output
+rm test_file test.fs
+
+dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
+./fs_make.x test.fs 100 > /dev/null 2>&1
+./fs_ref.x script test.fs scripts/create.script > /dev/null 2>&1
+./fs_ref.x ls test.fs > ref_output
+rm test_file test.fs
+
+diff ref_output my_output
+rm ref_output my_output
+
+echo "Running bad_create.script"
+dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
+./fs_make.x test.fs 100 > /dev/null 2>&1
+./test_fs.x script test.fs scripts/bad_create.script > /dev/null 2>&1
+./fs_ref.x ls test.fs > my_output
+rm test_file test.fs
+
+dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
+./fs_make.x test.fs 100 > /dev/null 2>&1
+./fs_ref.x script test.fs scripts/bad_create.script > /dev/null 2>&1
+./fs_ref.x ls test.fs > ref_output
+rm test_file test.fs
+
+diff ref_output my_output
+rm ref_output my_output
+
+# test fs_delete
+echo "Running delete.script"
+dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
+./fs_make.x test.fs 100 > /dev/null 2>&1
+./test_fs.x script test.fs scripts/delete.script > /dev/null 2>&1
+./fs_ref.x ls test.fs > my_output
+rm test_file test.fs
+
+dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
+./fs_make.x test.fs 100 > /dev/null 2>&1
+./fs_ref.x script test.fs scripts/delete.script > /dev/null 2>&1
+./fs_ref.x ls test.fs > ref_output
+rm test_file test.fs
+
+diff ref_output my_output
+rm ref_output my_output
+
+echo "Running delete2.script"
+dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
+./fs_make.x test.fs 100 > /dev/null 2>&1
+./test_fs.x script test.fs scripts/delete2.script > /dev/null 2>&1
+./fs_ref.x ls test.fs > my_output
+rm test_file test.fs
+
+dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
+./fs_make.x test.fs 100 > /dev/null 2>&1
+./fs_ref.x script test.fs scripts/delete2.script > /dev/null 2>&1
+./fs_ref.x ls test.fs > ref_output
+rm test_file test.fs
+
+diff ref_output my_output
 rm ref_output my_output
