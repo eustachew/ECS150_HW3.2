@@ -336,10 +336,10 @@ int fs_open(const char *filename)
 	}
 
 	while(offset < BLOCK_SIZE){
-		memcpy(rootEntry, buffer + offset, 16); //Read the root directory entry
-		if(strcmp(rootEntry, filename) == 0){ //find the directory entry that corresponds to th file that we are trying to open
+		memcpy(&rootEntry, buffer + offset, 16); //Read the root directory entry
+		if(strcmp((const char*)rootEntry, filename) == 0){ //find the directory entry that corresponds to th file that we are trying to open
 			struct openFile newFile;
-			memcpy(newFile.fileSize, buffer + offset + 16, 4); //copy the "file size" section of the entry into the struct
+			memcpy(&newFile.fileSize, buffer + offset + 16, 4); //copy the "file size" section of the entry into the struct
 			strcpy(newFile.filename, filename);  
 			newFile.offset = 0; //initial offset for a newly opened filed is 0
 
@@ -364,7 +364,7 @@ int fs_close(int fd)
 		return -1;
 	}
 	else if(fdArray[fd].fileSize != -1){
-		struct openFile emptyFile;
+		struct openFile emptyFile = {"\0", -1, 0};
 		fdArray[fd] = emptyFile;	//reseting the entry
 		fdArray[fd].fileSize = -1; //making sure the values are resetted
 		fdArray[fd].offset = 0;
@@ -397,7 +397,7 @@ int fs_lseek(int fd, size_t offset)
 	if(fdArray[fd].fileSize == -1){ //fd entry has no corresponding file
 		return -1;
 	}
-	if(offset > fdArray[fd].fileSize){
+	if(offset > (size_t)fdArray[fd].fileSize){
 		return -1;
 	}
 
