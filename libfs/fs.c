@@ -25,6 +25,7 @@ struct openFile{
 	char filename[16];
 	int32_t offset;
 	int32_t fileSize;
+	uint16_t dataIndex;
 };
 
 uint16_t *FATArray;
@@ -340,6 +341,7 @@ int fs_open(const char *filename)
 		if(strcmp((const char*)rootEntry, filename) == 0){ //find the directory entry that corresponds to th file that we are trying to open
 			struct openFile newFile;
 			memcpy(&newFile.fileSize, buffer + offset + 16, 4); //copy the "file size" section of the entry into the struct
+			memcpy(&newFile.dataIndex, buffer + offset + 20, 2); //copy the index of the first data block into the struct
 			strcpy(newFile.filename, filename);  
 			newFile.offset = 0; //initial offset for a newly opened filed is 0
 
@@ -364,10 +366,11 @@ int fs_close(int fd)
 		return -1;
 	}
 	else if(fdArray[fd].fileSize != -1){
-		struct openFile emptyFile = {"\0", -1, 0};
+		struct openFile emptyFile = {"\0", -1, 0, -1};
 		fdArray[fd] = emptyFile;	//reseting the entry
 		fdArray[fd].fileSize = -1; //making sure the values are resetted
 		fdArray[fd].offset = 0;
+		fdArray[fd].dataIndex = -1;
 	}
 	
 	return 0;
@@ -400,6 +403,9 @@ int fs_lseek(int fd, size_t offset)
 	if(offset > (size_t)fdArray[fd].fileSize){
 		return -1;
 	}
+	if(offset + fdArray[fd].offset > (size_t)fdArray[fd].fileSize){
+		return -1;
+	}
 
 	fdArray[fd].offset += offset;
 	return 0;
@@ -408,9 +414,45 @@ int fs_lseek(int fd, size_t offset)
 int fs_write(int fd, void *buf, size_t count)
 {
 	/* TODO: Phase 4 */
+	
 }
 
 int fs_read(int fd, void *buf, size_t count)
 {
 	/* TODO: Phase 4 */
+	if(fdArray[fd].fileSize == -1){ //fd entry has no corresponding file
+		return -1;
+	}
+	
+	uint8_t bounce_buffer[BLOCK_SIZE];
+
+	//If the requested amount to read is more than is left in the file, update the bytes to read to be whatever is left
+	if(fdArray[fd].fileSize - fdArray[fd].offset - count < 0){ 
+		count = fdArray[fd].fileSize - fdArray[fd].offset;
+	}
+
+	int bytesToRead = count;
+	int blockOffset = fdArray[fd].offset / 4096; //Offset within the array of data blocks that make up the file
+	int internalOffset = fdArray[fd].offset % 4096; //Offset within the current block
+	int bytesRead = 0; //Tracking how many bytes to read so we can use as offset into buf when using memcpy
+
+
+	while(bytesToRead > 0){
+		block_read(fdArray[fd].dataIndex + blockOffset, bounce_buffer);
+		if(4096 - internalOffset - bytesToRead > 0){ //If segment to read won't go to next block, read everything
+			memcpy(buf + bytesRead, bounce_buffer + internalOffset, bytesToRead); 
+			break;	//Exit loop since we finished reading the segment to read
+		}
+		else{ //Otherwise, if segment to read will go to next block, read however much is left of current block
+			memcpy(buf + bytesRead, bounce_buffer + internalOffset, 4096 - internalOffset);
+			bytesRead += 4096 - internalOffset;
+			bytesToRead -= bytesRead;
+			internalOffset = 0;
+			blockOffset++;
+		}
+	}
+
+	fdArray[fd].offset += count;
+	return count;
+
 }
