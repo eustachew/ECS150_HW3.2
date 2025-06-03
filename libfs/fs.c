@@ -435,10 +435,16 @@ int fs_read(int fd, void *buf, size_t count)
 	int blockOffset = fdArray[fd].offset / 4096; //Offset within the array of data blocks that make up the file
 	int internalOffset = fdArray[fd].offset % 4096; //Offset within the current block
 	int bytesRead = 0; //Tracking how many bytes to read so we can use as offset into buf when using memcpy
+	int blockIndex = fdArray[fd].dataIndex; //index of the block we are going to read from
+
+	//Iterate through the FAT array until we are positioned at the right index 
+	for(int i = 0; i < blockOffset; i++){
+		blockIndex = FATArray[blockIndex];
+	}
 
 
 	while(bytesToRead > 0){
-		block_read(fdArray[fd].dataIndex + blockOffset, bounce_buffer);
+		block_read(blockIndex, bounce_buffer);
 		if(4096 - internalOffset - bytesToRead > 0){ //If segment to read won't go to next block, read everything
 			memcpy(buf + bytesRead, bounce_buffer + internalOffset, bytesToRead); 
 			break;	//Exit loop since we finished reading the segment to read
@@ -448,7 +454,7 @@ int fs_read(int fd, void *buf, size_t count)
 			bytesRead += 4096 - internalOffset;
 			bytesToRead -= bytesRead;
 			internalOffset = 0;
-			blockOffset++;
+			blockIndex = FATArray[blockIndex];
 		}
 	}
 
