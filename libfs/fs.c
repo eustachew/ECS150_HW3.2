@@ -22,9 +22,10 @@ struct superblock{
 };
 
 struct openFile{
+	bool isOpen;
 	char filename[16];
-	int32_t offset;
-	int32_t fileSize;
+	uint32_t offset;
+	uint32_t fileSize;
 	uint16_t dataIndex;
 };
 
@@ -84,7 +85,7 @@ int fs_mount(const char *diskname)
 
 	//initialize the file descriptor array for later use when opening and closing files
 	for (int i = 0; i < FS_OPEN_MAX_COUNT; i++) {
-		fdArray[i].fileSize = -1;
+		fdArray[i].isOpen = false;
 	}
 	mounted = true;
 	return 0;
@@ -260,7 +261,7 @@ int fs_delete(const char *filename)
 	}
 	// Check if file is currently open
 	for (int i = 0; i < FS_OPEN_MAX_COUNT; i++) {
-		if(fdArray[i].fileSize == -1){ //fd entry has no corresponding file
+		if(fdArray[i].isOpen == false){ //fd entry has no corresponding file
 			continue;
 		}
 		if(strcmp(fdArray[i].filename, filename) == 0){
@@ -328,6 +329,11 @@ int fs_ls(void)
 int fs_open(const char *filename)
 {
 	/* TODO: Phase 3 */
+	//Exit if filestystem not mounted
+	if(!mounted){
+		return -1;
+	}
+
 	uint8_t buffer[BLOCK_SIZE];
 	uint8_t rootEntry[32];
 	int offset = 0;
@@ -346,11 +352,13 @@ int fs_open(const char *filename)
 			newFile.offset = 0; //initial offset for a newly opened filed is 0
 
 			for(int i = 0; i < FS_OPEN_MAX_COUNT; i++){  //find the first open entry in the fd array to assign fd
-				if(fdArray[i].fileSize == -1){ //check to see if the entry is unused, if so then fill it in with the corresponding info
+				if(fdArray[i].isOpen == false){ //check to see if the entry is unused, if so then fill it in with the corresponding info
 					fdArray[i] = newFile;
+					fdArray[i].isOpen = true;
 					return i; //return the fd value
 				}
 			}
+			return -1; //No open fd entry was found
 		}
 		offset += 32; //offset to the next 32 bytes, since each root directory entry is 32 bytes
 	}
@@ -359,18 +367,23 @@ int fs_open(const char *filename)
 
 int fs_close(int fd)
 {
+	//Exit if filestystem not mounted
+	if(!mounted){
+		return -1;
+	}
 	if(fd > 31 || fd < 0){ //invalid fd value
 		return -1;
 	}
-	if(fdArray[fd].fileSize == -1){ //fd entry has no corresponding file
+	if(fdArray[fd].isOpen == false){ //fd entry has no corresponding file
 		return -1;
 	}
-	else if(fdArray[fd].fileSize != -1){
-		struct openFile emptyFile = {"\0", -1, 0, -1};
+	else if(fdArray[fd].isOpen == true){
+		struct openFile emptyFile = {false, "\0", 0, 0, 0};
 		fdArray[fd] = emptyFile;	//reseting the entry
-		fdArray[fd].fileSize = -1; //making sure the values are resetted
+		fdArray[fd].fileSize = 0; //making sure the values are resetted
+		fdArray[fd].isOpen = false;
 		fdArray[fd].offset = 0;
-		fdArray[fd].dataIndex = -1;
+		fdArray[fd].dataIndex = 0;
 	}
 	
 	return 0;
@@ -380,10 +393,14 @@ int fs_close(int fd)
 int fs_stat(int fd)
 {
 	/* TODO: Phase 3 */
+	//Exit if filestystem not mounted
+	if(!mounted){
+		return -1;
+	}
 	if(fd > 31 || fd < 0){ //invalid fd value
 		return -1;
 	}
-	if(fdArray[fd].fileSize == -1){ //fd entry has no corresponding file
+	if(fdArray[fd].isOpen == false){ //fd entry has no corresponding file
 		return -1;
 	}
 	
@@ -394,10 +411,14 @@ int fs_stat(int fd)
 int fs_lseek(int fd, size_t offset)
 {
 	/* TODO: Phase 3 */
+	//Exit if filestystem not mounted
+	if(!mounted){
+		return -1;
+	}
 	if(fd > 31 || fd < 0){ //invalid fd value
 		return -1;
 	}
-	if(fdArray[fd].fileSize == -1){ //fd entry has no corresponding file
+	if(fdArray[fd].isOpen == false){ //fd entry has no corresponding file
 		return -1;
 	}
 	if(offset > (size_t)fdArray[fd].fileSize){
@@ -420,14 +441,17 @@ int fs_write(int fd, void *buf, size_t count)
 int fs_read(int fd, void *buf, size_t count)
 {
 	/* TODO: Phase 4 */
-	if(fdArray[fd].fileSize == -1){ //fd entry has no corresponding file
+	if(fdArray[fd].isOpen == false){ //fd entry has no corresponding file
+		return -1;
+	}
+	if(!mounted){ //Exit if filestystem not mounted
 		return -1;
 	}
 	
 	uint8_t bounce_buffer[BLOCK_SIZE];
 
 	//If the requested amount to read is more than is left in the file, update the bytes to read to be whatever is left
-	if(fdArray[fd].fileSize - fdArray[fd].offset - count < 0){ 
+	if(fdArray[fd].offset + count > fdArray[fd].fileSize){ 
 		count = fdArray[fd].fileSize - fdArray[fd].offset;
 	}
 
