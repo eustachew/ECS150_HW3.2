@@ -253,7 +253,7 @@ int fs_delete(const char *filename)
 		curIndex = nextIndex;
 	}
 	
-	if(curIndex < Block.numDataBlocks && FATArray[curIndex] == FAT_EOC){
+	if(curIndex != 0 && curIndex < Block.numDataBlocks && FATArray[curIndex] == FAT_EOC){
 		FATArray[curIndex] = 0;
 	}
 
@@ -369,11 +369,8 @@ int fs_lseek(int fd, size_t offset)
 	if(offset > (size_t)fdArray[fd].fileSize){
 		return -1;
 	}
-	if(offset + fdArray[fd].offset > (size_t)fdArray[fd].fileSize){
-		return -1;
-	}
 
-	fdArray[fd].offset += offset;
+	fdArray[fd].offset = offset;
 	return 0;
 }
 
@@ -385,7 +382,7 @@ uint16_t getEmptyFATIndex(){
 		}
 		index++;
 	}
-	return 0;
+	return FAT_EOC;
 }
 
 int fs_write(int fd, void *buf, size_t count)
@@ -432,7 +429,7 @@ int fs_write(int fd, void *buf, size_t count)
 	// for writing into empty file
 	if(blockIndex == FAT_EOC){
 		emptyIndex = getEmptyFATIndex();
-		if(emptyIndex == 0){
+		if(emptyIndex == FAT_EOC){
 			return 0;
 		}
 		fdArray[fd].dataIndex = emptyIndex;
@@ -446,7 +443,7 @@ int fs_write(int fd, void *buf, size_t count)
 	for(int i = 0; i < blockOffset; i++){
 		if(FATArray[blockIndex] == FAT_EOC){ // in the case of when offset is at beginning of new block (4096 for example)
 			emptyIndex = getEmptyFATIndex();
-			if(emptyIndex == 0){
+			if(emptyIndex == FAT_EOC){
 				return 0;
 			}
 			FATArray[blockIndex] = emptyIndex;
@@ -458,21 +455,21 @@ int fs_write(int fd, void *buf, size_t count)
 		block_read(dataBlockStartIndex + blockIndex, bounce_buffer);
 		if(BLOCK_SIZE - internalOffset >= bytesLeftToWrite){ // last block to write
 			bytesToWriteInBlock = bytesLeftToWrite;
-			memcpy(buf + bytesWritten, bounce_buffer + internalOffset, bytesToWriteInBlock);
+			memcpy(bounce_buffer + internalOffset, buf + bytesWritten, bytesToWriteInBlock);
 			block_write(dataBlockStartIndex + blockIndex, bounce_buffer);
 			bytesWritten += bytesToWriteInBlock;
 			bytesLeftToWrite -= bytesToWriteInBlock;
 		}
 		else{ // more bytes to write after this
 			bytesToWriteInBlock = BLOCK_SIZE - internalOffset;
-			memcpy(buf + bytesWritten, bounce_buffer + internalOffset, bytesToWriteInBlock);
+			memcpy(bounce_buffer + internalOffset, buf + bytesWritten, bytesToWriteInBlock);
 			block_write(dataBlockStartIndex + blockIndex, bounce_buffer);
 			bytesWritten += bytesToWriteInBlock;
 			bytesLeftToWrite -= bytesToWriteInBlock;
 			internalOffset = 0;
 			if(FATArray[blockIndex] == FAT_EOC){ // in the case of when offset is at beginning of new block (4096 for example)
-				uint16_t emptyIndex = getEmptyFATIndex();
-				if(emptyIndex == 0){ // unable to extend bc no empty blocks available
+				emptyIndex = getEmptyFATIndex();
+				if(emptyIndex == FAT_EOC){ // unable to extend bc no empty blocks available
 					break;
 				}
 				FATArray[blockIndex] = emptyIndex;
@@ -496,6 +493,9 @@ int fs_read(int fd, void *buf, size_t count)
 	if(!mounted){ //Exit if filestystem not mounted
 		return -1;
 	}
+	if(buf == NULL){
+		return -1;
+	}
 	
 	uint8_t bounce_buffer[BLOCK_SIZE];
 
@@ -516,7 +516,7 @@ int fs_read(int fd, void *buf, size_t count)
 	}
 
 
-	while(bytesToRead > 0){
+	while(bytesToRead > 0 && blockIndex != FAT_EOC){
 		block_read(blockIndex + Block.dataIndex, bounce_buffer);
 		if(4096 - internalOffset - bytesToRead > 0){ //If segment to read won't go to next block, read everything
 			memcpy(buf + bytesRead, bounce_buffer + internalOffset, bytesToRead); 
