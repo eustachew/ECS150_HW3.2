@@ -4,7 +4,8 @@ objs := fs.o disk.o
 
 CC := gcc
 CFLAGS := -Wall -Wextra
-# CFLAGS += -Werror
+CFLAGS += -Werror
+# CFLAGS += -g
 
 all: $(lib)
 

@@ -9,6 +9,7 @@
 #include "fs.h"
 
 #define FAT_EOC 0xFFFF
+#define FILE_ENTRY_SIZE 32
 
 bool mounted = false;
 
@@ -21,6 +22,14 @@ struct superblock{
 	uint8_t numFATBlocks;
 };
 
+struct __attribute__((packed)) file_entry
+{
+	uint8_t filename[16];
+	uint32_t file_size;
+	uint16_t first_data_block_idx;
+	uint8_t padding[10];
+};
+
 struct openFile{
 	bool isOpen;
 	char filename[16];
@@ -30,6 +39,7 @@ struct openFile{
 };
 
 uint16_t *FATArray;
+struct file_entry root_dir[FS_FILE_MAX_COUNT];
 struct openFile fdArray[FS_OPEN_MAX_COUNT];
 
 struct superblock Block;
@@ -39,10 +49,12 @@ int fs_mount(const char *diskname)
 	/* TODO */
 	uint8_t buffer[BLOCK_SIZE];
 
-	block_disk_open(diskname);
+	if (block_disk_open(diskname) == -1) {
+		return -1;
+	}
 
-	if(block_read(0, buffer) != 0){
-		return 0;
+	if (block_read(0, buffer) == -1) {
+		return -1;
 	}
 
 	//"Mounting" the disk by reading all the info we need
@@ -57,22 +69,27 @@ int fs_mount(const char *diskname)
 	Block.signature[8] = '\0';
 	int num_blocks = block_disk_count();
 	if(strcmp(Block.signature, "ECS150FS") != 0){
+		block_disk_close();
 		return -1;
 	}
 	if(Block.numFATBlocks < Block.numDataBlocks * 2 / 4096){
+		block_disk_close();
 		return -1;
 	}
 	if(Block.numTotalBlocks != Block.numDataBlocks + Block.numFATBlocks + 2 || Block.numTotalBlocks != num_blocks){
+		block_disk_close();
 		return -1;
 	}
 	if(Block.rootIndex != Block.numFATBlocks + 1 || Block.dataIndex != Block.rootIndex + 1){
+		block_disk_close();
 		return -1;
 	}
-	mounted = true;
 	// Copy FAT from disk (FATArray contains more entries than data blocks so we can copy write whole pages back into disk later)
 	FATArray = calloc(Block.numFATBlocks * (BLOCK_SIZE / 2), sizeof(uint16_t));
 	for(int i = 0; i < Block.numFATBlocks; i++){ // loop through each FAT block
 		if(block_read(i+1, buffer) != 0){
+			free(FATArray);
+			block_disk_close();
 			return -1;
 		}
 		for(int j = 0; j < BLOCK_SIZE; j+=2){ // loop through each entry in FAT block
@@ -81,6 +98,16 @@ int fs_mount(const char *diskname)
 			}
 			memcpy(&FATArray[(i*BLOCK_SIZE + j) / 2], buffer + j, 2);
 		}
+	}
+
+	// copy root directory info from disk
+	if(block_read(Block.rootIndex, buffer) != 0){
+		free(FATArray);
+		block_disk_close();
+		return -1;
+	}
+	for (int i = 0; i < (FILE_ENTRY_SIZE*FS_FILE_MAX_COUNT); i+=FILE_ENTRY_SIZE) {
+		memcpy(&root_dir[i/FILE_ENTRY_SIZE], &buffer[i], FILE_ENTRY_SIZE);
 	}
 
 	//initialize the file descriptor array for later use when opening and closing files
@@ -103,6 +130,10 @@ int fs_umount(void)
 		}
 	}
 	free(FATArray);
+	// write root dir back into disk
+	if(block_write(Block.rootIndex, root_dir) != 0){
+		return -1;
+	}
 	if(block_disk_close() != 0){
 		return -1;
 	}
@@ -113,42 +144,19 @@ int fs_umount(void)
 int fs_info(void)
 {
 	/* TODO */
-
-	uint8_t buffer[BLOCK_SIZE];
-	int offset;
-	int numOccupied = 0; //First FAT entry is always reserved from the start
-	char FATEntry[2];
-
-	//Reading the data blocks to see how many are free
-	for(int numFAT = 1; numFAT <= Block.numFATBlocks; numFAT++){
-		offset = 0;
-		if(block_read(numFAT, buffer) != 0){
-			return -1;
-		}
-		while(offset < BLOCK_SIZE){
-			memcpy(FATEntry, buffer + offset, 2);
-			if(*FATEntry != 0){
-				numOccupied++;
-			}
-			offset += 2; //offset to the next 2 bytes since each FAT entry is 2 bytes
+	uint16_t fat_free_count = 0;
+	for (int i = 0; i < Block.numDataBlocks; i++) {	
+		if (FATArray[i] == 0) {
+			fat_free_count++;
 		}
 	}
 	
 	//Reading root directory block into buffer, and seeing how many root directory entries are free
-	if(block_read(Block.rootIndex, buffer) != 0){
-		return -1;
-	}
-
-	offset = 0;
-	uint8_t rootEntry[32];
-	int numFreeEntries = FS_FILE_MAX_COUNT;
-
-	while(offset < BLOCK_SIZE){
-		memcpy(rootEntry, buffer + offset, 32); //Read the root directory entry
-		if(*rootEntry != 0){
-			numFreeEntries--;
+	int rdir_free_count = 0;
+	for (int i = 0; i < FS_FILE_MAX_COUNT; i++) {
+		if (root_dir[i].filename[0] == '\0') {
+			rdir_free_count++;
 		}
-		offset += 32; //offset to the next 32 bytes, since each root directory entry is 32 bytes
 	}
 
 	printf("FS Info:\n");
@@ -157,8 +165,8 @@ int fs_info(void)
 	printf("rdir_blk=%d\n", Block.rootIndex);
 	printf("data_blk=%d\n", Block.dataIndex);
 	printf("data_blk_count=%d\n", Block.numDataBlocks);
-	printf("fat_free_ratio=%d/%d\n", Block.numDataBlocks - numOccupied, Block.numDataBlocks);
-	printf("rdir_free_ratio=%d/%d\n", numFreeEntries, FS_FILE_MAX_COUNT);
+	printf("fat_free_ratio=%d/%d\n", fat_free_count, Block.numDataBlocks);
+	printf("rdir_free_ratio=%d/%d\n", rdir_free_count, FS_FILE_MAX_COUNT);
 
 	return 0;
 }
@@ -178,44 +186,21 @@ int fs_create(const char *filename)
 		return -1;
 	}
 	// Check if filename already in root directory
-	uint8_t buffer[BLOCK_SIZE];
-	uint8_t rootEntry[32];
-	char file[16];
-	int offset = 0;
-
-	if(block_read(Block.rootIndex, buffer) != 0){
-		return -1;
-	}
-
-	while(offset < BLOCK_SIZE){
-		memcpy(rootEntry, buffer + offset, 32);
-		if(rootEntry[0] != '\0'){
-			memcpy(file, rootEntry, 16);
-			if(strcmp(file, filename) == 0){ // filename already exists in root directory
-				return -1;
-			}
+	for(int i = 0; i < FS_FILE_MAX_COUNT; i++){
+		if(strcmp((char*)root_dir[i].filename, filename) == 0){
+			return -1;
 		}
-		offset += 32; //offset to the next 32 bytes, since each root directory entry is 32 bytes
 	}
-	// Check if there is empty entry. If there is, update that entry with filename
-	offset = 0;
+
 	uint32_t newfilesize = 0;
 	uint16_t newfileindex = FAT_EOC;
-
-	while(offset < BLOCK_SIZE){
-		memcpy(rootEntry, buffer + offset, 32);
-		if(rootEntry[0] == '\0'){
-			memcpy(rootEntry, filename, strlen(filename)+1);
-			memcpy(rootEntry + 16, &newfilesize, 4);
-			memcpy(rootEntry + 20, &newfileindex, 2);
-
-			memcpy(buffer + offset, rootEntry, 32);
-			if(block_write(Block.rootIndex, buffer) != 0){
-				return -1;
-			}
+	for(int i = 0; i < FS_FILE_MAX_COUNT; i++){
+		if(root_dir[i].filename[0] == '\0'){
+			strncpy((char*)root_dir[i].filename, filename, 16);
+			root_dir[i].file_size = newfilesize;
+			root_dir[i].first_data_block_idx = newfileindex;
 			return 0;
 		}
-		offset += 32; //offset to the next 32 bytes, since each root directory entry is 32 bytes
 	}
 	return -1; // root directory full
 }
@@ -235,30 +220,17 @@ int fs_delete(const char *filename)
 		return -1;
 	}
 	// Check if filename is in root directory
-	uint8_t buffer[BLOCK_SIZE];
-	uint8_t rootEntry[32];
-	char file[16];
-	int offset = 0;
-	bool fileInRoot = false;
-
-	if(block_read(Block.rootIndex, buffer) != 0){
-		return -1;
-	}
-
-	while(offset < BLOCK_SIZE){
-		memcpy(rootEntry, buffer + offset, 32);
-		if(rootEntry[0] != '\0'){
-			memcpy(file, rootEntry, 16);
-			if(strcmp(file, filename) == 0){ // filename in root directory
-				fileInRoot = true;
-				break;
-			}
+	int index = -1;
+	for(int i = 0; i < FS_FILE_MAX_COUNT; i++){
+		if(strcmp((char*)root_dir[i].filename, filename) == 0){
+			index = i;
+			break;
 		}
-		offset += 32; //offset to the next 32 bytes, since each root directory entry is 32 bytes
 	}
-	if(!fileInRoot){
+	if(index == -1){
 		return -1;
 	}
+
 	// Check if file is currently open
 	for (int i = 0; i < FS_OPEN_MAX_COUNT; i++) {
 		if(fdArray[i].isOpen == false){ //fd entry has no corresponding file
@@ -268,10 +240,11 @@ int fs_delete(const char *filename)
 			return -1;
 		}
 	}
+
+	root_dir[index].filename[0] = '\0';
 	// Remove file from root directory (Set FAT entries of file to 0, set filename at file entry to '\0')
 	// offset and rootEntry is from matching entry
-	uint16_t curIndex;
-	memcpy(&curIndex, rootEntry + 20, 2);
+	uint16_t curIndex = root_dir[index].first_data_block_idx;
 
 	uint16_t nextIndex = curIndex;
 	while(curIndex < Block.numDataBlocks && FATArray[curIndex] != FAT_EOC){
@@ -283,13 +256,7 @@ int fs_delete(const char *filename)
 	if(curIndex < Block.numDataBlocks && FATArray[curIndex] == FAT_EOC){
 		FATArray[curIndex] = 0;
 	}
-	
-	
-	char nullChar = '\0';
-	memcpy(buffer + offset, &nullChar, 1);
-	if(block_write(Block.rootIndex, buffer) != 0){
-		return -1;
-	}
+
 	return 0;
 }
 
@@ -298,30 +265,12 @@ int fs_ls(void)
 	// Check if FS is mounted
 	if(!mounted){
 		return -1;
-	}
-
-	// loop through root directory and if filename != '\0', print file info
-	uint8_t buffer[BLOCK_SIZE];
-	uint8_t rootEntry[32];
-	char filename[16];
-	uint32_t filesize;
-	uint16_t fileindex;
-	int offset = 0;
-
-	if(block_read(Block.rootIndex, buffer) != 0){
-		return -1;
-	}
-	
+	}	
 	printf("FS Ls:\n");
-	while(offset < BLOCK_SIZE){
-		memcpy(rootEntry, buffer + offset, 32);
-		if(rootEntry[0] != '\0'){
-			memcpy(filename, rootEntry, 16);
-			memcpy(&filesize, rootEntry + 16, 4);
-			memcpy(&fileindex, rootEntry + 20, 2);
-			printf("file: %s, size: %u, data_blk: %u\n", filename, filesize, fileindex);
+	for(int i = 0; i < FS_FILE_MAX_COUNT; i++){
+		if(root_dir[i].filename[0] != '\0'){
+			printf("file: %s, size: %u, data_blk: %u\n", root_dir[i].filename, root_dir[i].file_size, root_dir[i].first_data_block_idx);
 		}
-		offset += 32; //offset to the next 32 bytes, since each root directory entry is 32 bytes
 	}
 	return 0;
 }
@@ -333,23 +282,20 @@ int fs_open(const char *filename)
 	if(!mounted){
 		return -1;
 	}
-
-	uint8_t buffer[BLOCK_SIZE];
-	uint8_t rootEntry[32];
-	int offset = 0;
-
-	if(block_read(Block.rootIndex, buffer) != 0){
+	if(filename == NULL){
+		return -1;
+	}
+	if(strlen(filename) >= FS_FILENAME_LEN){
 		return -1;
 	}
 
-	while(offset < BLOCK_SIZE){
-		memcpy(&rootEntry, buffer + offset, 16); //Read the root directory entry
-		if(strcmp((const char*)rootEntry, filename) == 0){ //find the directory entry that corresponds to th file that we are trying to open
+	for(int i = 0; i < FS_FILE_MAX_COUNT; i++){
+		if(strcmp((char*)root_dir[i].filename, filename) == 0){
 			struct openFile newFile;
-			memcpy(&newFile.fileSize, buffer + offset + 16, 4); //copy the "file size" section of the entry into the struct
-			memcpy(&newFile.dataIndex, buffer + offset + 20, 2); //copy the index of the first data block into the struct
-			strcpy(newFile.filename, filename);  
-			newFile.offset = 0; //initial offset for a newly opened filed is 0
+			strncpy(newFile.filename, filename, 16);
+			newFile.fileSize = root_dir[i].file_size;
+			newFile.dataIndex = root_dir[i].first_data_block_idx;
+			newFile.offset = 0;
 
 			for(int i = 0; i < FS_OPEN_MAX_COUNT; i++){  //find the first open entry in the fd array to assign fd
 				if(fdArray[i].isOpen == false){ //check to see if the entry is unused, if so then fill it in with the corresponding info
@@ -360,7 +306,6 @@ int fs_open(const char *filename)
 			}
 			return -1; //No open fd entry was found
 		}
-		offset += 32; //offset to the next 32 bytes, since each root directory entry is 32 bytes
 	}
 	return -1;  //file was never found or fd array was already full
 }
@@ -432,10 +377,115 @@ int fs_lseek(int fd, size_t offset)
 	return 0;
 }
 
+uint16_t getEmptyFATIndex(){
+	uint16_t index = 0;
+	while(index < Block.numDataBlocks){
+		if(FATArray[index] == 0){
+			return index;
+		}
+		index++;
+	}
+	return 0;
+}
+
 int fs_write(int fd, void *buf, size_t count)
 {
 	/* TODO: Phase 4 */
-	
+	if(!mounted){
+		return -1;
+	}
+	if(fd > 31 || fd < 0){
+		return -1;
+	}
+	if(fdArray[fd].isOpen == false){
+		return -1;
+	}
+	if(buf == NULL){
+		return -1;
+	}
+	if(count == 0){
+		return 0;
+	}
+
+	uint8_t bounce_buffer[BLOCK_SIZE];
+
+	uint16_t bytesWritten = 0;
+	uint16_t bytesLeftToWrite = count;
+	int bytesToWriteInBlock = 0;
+	int blockOffset = fdArray[fd].offset / BLOCK_SIZE; //Offset within the array of data blocks that make up the file
+	int internalOffset = fdArray[fd].offset % BLOCK_SIZE; //Offset within the current block
+	uint16_t dataBlockStartIndex = Block.dataIndex;
+	uint16_t blockIndex = fdArray[fd].dataIndex;
+	uint16_t emptyIndex = 0;
+	int index = -1;
+
+	for(int i = 0; i < FS_FILE_MAX_COUNT; i++){
+		if(strcmp((char*)root_dir[i].filename, fdArray[fd].filename) == 0){
+			index = i;
+		}
+	}
+
+	if(index == -1){
+		return -1;
+	}
+
+	// for writing into empty file
+	if(blockIndex == FAT_EOC){
+		emptyIndex = getEmptyFATIndex();
+		if(emptyIndex == 0){
+			return 0;
+		}
+		fdArray[fd].dataIndex = emptyIndex;
+		blockIndex = emptyIndex;
+		FATArray[emptyIndex] = FAT_EOC;
+		root_dir[index].first_data_block_idx = emptyIndex;
+	}
+
+
+	//Iterate through the FAT array until we are positioned at the right index 
+	for(int i = 0; i < blockOffset; i++){
+		if(FATArray[blockIndex] == FAT_EOC){ // in the case of when offset is at beginning of new block (4096 for example)
+			emptyIndex = getEmptyFATIndex();
+			if(emptyIndex == 0){
+				return 0;
+			}
+			FATArray[blockIndex] = emptyIndex;
+		}
+		blockIndex = FATArray[blockIndex];
+	}
+
+	while(bytesLeftToWrite > 0){
+		block_read(dataBlockStartIndex + blockIndex, bounce_buffer);
+		if(BLOCK_SIZE - internalOffset >= bytesLeftToWrite){ // last block to write
+			bytesToWriteInBlock = bytesLeftToWrite;
+			memcpy(buf + bytesWritten, bounce_buffer + internalOffset, bytesToWriteInBlock);
+			block_write(dataBlockStartIndex + blockIndex, bounce_buffer);
+			bytesWritten += bytesToWriteInBlock;
+			bytesLeftToWrite -= bytesToWriteInBlock;
+		}
+		else{ // more bytes to write after this
+			bytesToWriteInBlock = BLOCK_SIZE - internalOffset;
+			memcpy(buf + bytesWritten, bounce_buffer + internalOffset, bytesToWriteInBlock);
+			block_write(dataBlockStartIndex + blockIndex, bounce_buffer);
+			bytesWritten += bytesToWriteInBlock;
+			bytesLeftToWrite -= bytesToWriteInBlock;
+			internalOffset = 0;
+			if(FATArray[blockIndex] == FAT_EOC){ // in the case of when offset is at beginning of new block (4096 for example)
+				uint16_t emptyIndex = getEmptyFATIndex();
+				if(emptyIndex == 0){ // unable to extend bc no empty blocks available
+					break;
+				}
+				FATArray[blockIndex] = emptyIndex;
+			}
+			blockIndex = FATArray[blockIndex];
+		}
+	}
+
+	fdArray[fd].offset += bytesWritten;
+	fdArray[fd].fileSize = (fdArray[fd].offset > fdArray[fd].fileSize) ? fdArray[fd].offset : fdArray[fd].fileSize; // max(fdArray[fd].offset, fdArray[fd].fileSize). offset will be greater than orignal fileSize if extended.
+	root_dir[index].file_size = fdArray[fd].fileSize;
+	printf("file: %s, size: %u, data_blk: %u\n", root_dir[index].filename, root_dir[index].file_size, root_dir[index].first_data_block_idx);
+	return bytesWritten;
 }
 
 int fs_read(int fd, void *buf, size_t count)
@@ -468,7 +518,7 @@ int fs_read(int fd, void *buf, size_t count)
 
 
 	while(bytesToRead > 0){
-		block_read(blockIndex, bounce_buffer);
+		block_read(blockIndex + Block.dataIndex, bounce_buffer);
 		if(4096 - internalOffset - bytesToRead > 0){ //If segment to read won't go to next block, read everything
 			memcpy(buf + bytesRead, bounce_buffer + internalOffset, bytesToRead); 
 			break;	//Exit loop since we finished reading the segment to read

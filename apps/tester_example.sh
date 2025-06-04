@@ -64,68 +64,24 @@ done
 rm empty.fs add_1.fs add_2.fs add_3_rm_1.fs
 rm ref_output my_output
 
-# test fs_create
-echo "Running create.script"
-dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
-./fs_make.x test.fs 100 > /dev/null 2>&1
-./test_fs.x script test.fs scripts/create.script > /dev/null 2>&1
-./fs_ref.x ls test.fs > my_output
-rm test_file test.fs
+# comparing outputs of scripts
+for script in scripts/*.script; do
+    echo "Running $script"
+    dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
+    ./fs_make.x test.fs 100 > /dev/null 2>&1
+    ./test_fs.x script test.fs $script > /dev/null 2>&1
+    ./test_fs.x info test.fs > my_output_info
+    ./test_fs.x ls test.fs > my_output_ls
+    rm test_file test.fs
 
-dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
-./fs_make.x test.fs 100 > /dev/null 2>&1
-./fs_ref.x script test.fs scripts/create.script > /dev/null 2>&1
-./fs_ref.x ls test.fs > ref_output
-rm test_file test.fs
+    dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
+    ./fs_make.x test.fs 100 > /dev/null 2>&1
+    ./fs_ref.x script test.fs $script > /dev/null 2>&1
+    ./fs_ref.x info test.fs > ref_output_info
+    ./fs_ref.x ls test.fs > ref_output_ls
+    rm test_file test.fs
 
-diff ref_output my_output
-rm ref_output my_output
-
-echo "Running bad_create.script"
-dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
-./fs_make.x test.fs 100 > /dev/null 2>&1
-./test_fs.x script test.fs scripts/bad_create.script > /dev/null 2>&1
-./fs_ref.x ls test.fs > my_output
-rm test_file test.fs
-
-dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
-./fs_make.x test.fs 100 > /dev/null 2>&1
-./fs_ref.x script test.fs scripts/bad_create.script > /dev/null 2>&1
-./fs_ref.x ls test.fs > ref_output
-rm test_file test.fs
-
-diff ref_output my_output
-rm ref_output my_output
-
-# test fs_delete
-echo "Running delete.script"
-dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
-./fs_make.x test.fs 100 > /dev/null 2>&1
-./test_fs.x script test.fs scripts/delete.script > /dev/null 2>&1
-./fs_ref.x ls test.fs > my_output
-rm test_file test.fs
-
-dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
-./fs_make.x test.fs 100 > /dev/null 2>&1
-./fs_ref.x script test.fs scripts/delete.script > /dev/null 2>&1
-./fs_ref.x ls test.fs > ref_output
-rm test_file test.fs
-
-diff ref_output my_output
-rm ref_output my_output
-
-echo "Running delete2.script"
-dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
-./fs_make.x test.fs 100 > /dev/null 2>&1
-./test_fs.x script test.fs scripts/delete2.script > /dev/null 2>&1
-./fs_ref.x ls test.fs > my_output
-rm test_file test.fs
-
-dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
-./fs_make.x test.fs 100 > /dev/null 2>&1
-./fs_ref.x script test.fs scripts/delete2.script > /dev/null 2>&1
-./fs_ref.x ls test.fs > ref_output
-rm test_file test.fs
-
-diff ref_output my_output
-rm ref_output my_output
+    diff my_output_info ref_output_info
+    diff my_output_ls ref_output_ls
+    rm my_output_info ref_output_info my_output_ls ref_output_ls
+done
