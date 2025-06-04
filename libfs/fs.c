@@ -468,7 +468,7 @@ int fs_read(int fd, void *buf, size_t count)
 
 
 	while(bytesToRead > 0){
-		block_read(blockIndex, bounce_buffer);
+		block_read(blockIndex + Block.dataIndex, bounce_buffer);
 		if(4096 - internalOffset - bytesToRead > 0){ //If segment to read won't go to next block, read everything
 			memcpy(buf + bytesRead, bounce_buffer + internalOffset, bytesToRead); 
 			break;	//Exit loop since we finished reading the segment to read
