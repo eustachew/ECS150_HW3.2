@@ -450,7 +450,6 @@ int fs_write(int fd, void *buf, size_t count)
 		}
 		blockIndex = FATArray[blockIndex];
 	}
-	printf("Writing to Block %d with an offset of %d\n", dataBlockStartIndex + blockIndex, internalOffset);
 	while(bytesLeftToWrite > 0){
 		block_read(dataBlockStartIndex + blockIndex, bounce_buffer);
 		if(BLOCK_SIZE - internalOffset >= bytesLeftToWrite){ // last block to write
@@ -518,22 +517,8 @@ int fs_read(int fd, void *buf, size_t count)
 
 	while(bytesToRead > 0 && blockIndex != FAT_EOC){
 		block_read(blockIndex + Block.dataIndex, bounce_buffer);
-		printf("Bounce buffer (first 32 bytes):\n");
-		for (int i = 0; i < 32 && i < BLOCK_SIZE; i++) {
-			printf("%02X ", bounce_buffer[i]);
-		}
-		printf("\n");
 		if(4096 - internalOffset - bytesToRead > 0){ //If segment to read won't go to next block, read everything
-			memcpy(buf + bytesRead, bounce_buffer + internalOffset, bytesToRead); 
-
-			printf("User buffer (first 5 bytes):\n");
-			char *char_buf = (char *)buf;
-			for (int i = 0; i < 5; i++) {
-   				printf("%02X ", (unsigned char)char_buf[i]);
-			}
-			printf("\n");
-
-
+			memcpy(buf + bytesRead, bounce_buffer + internalOffset, bytesToRead);
 			break;	//Exit loop since we finished reading the segment to read
 		}
 		else{ //Otherwise, if segment to read will go to next block, read however much is left of current block
@@ -546,7 +531,6 @@ int fs_read(int fd, void *buf, size_t count)
 	}
 
 	fdArray[fd].offset += count;
-	printf("New file offset: %d\n", fdArray[fd].offset);
 	return count;
 
 }
