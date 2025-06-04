@@ -450,7 +450,7 @@ int fs_write(int fd, void *buf, size_t count)
 		}
 		blockIndex = FATArray[blockIndex];
 	}
-
+	printf("Writing to Block %d with an offset of %d\n", dataBlockStartIndex + blockIndex, internalOffset);
 	while(bytesLeftToWrite > 0){
 		block_read(dataBlockStartIndex + blockIndex, bounce_buffer);
 		if(BLOCK_SIZE - internalOffset >= bytesLeftToWrite){ // last block to write
@@ -504,10 +504,10 @@ int fs_read(int fd, void *buf, size_t count)
 		count = fdArray[fd].fileSize - fdArray[fd].offset;
 	}
 
-	int bytesToRead = count;
+	uint16_t bytesToRead = count;
 	int blockOffset = fdArray[fd].offset / 4096; //Offset within the array of data blocks that make up the file
 	int internalOffset = fdArray[fd].offset % 4096; //Offset within the current block
-	int bytesRead = 0; //Tracking how many bytes to read so we can use as offset into buf when using memcpy
+	uint16_t bytesRead = 0; //Tracking how many bytes to read so we can use as offset into buf when using memcpy
 	int blockIndex = fdArray[fd].dataIndex; //index of the block we are going to read from
 
 	//Iterate through the FAT array until we are positioned at the right index 
@@ -518,20 +518,35 @@ int fs_read(int fd, void *buf, size_t count)
 
 	while(bytesToRead > 0 && blockIndex != FAT_EOC){
 		block_read(blockIndex + Block.dataIndex, bounce_buffer);
+		printf("Bounce buffer (first 32 bytes):\n");
+		for (int i = 0; i < 32 && i < BLOCK_SIZE; i++) {
+			printf("%02X ", bounce_buffer[i]);
+		}
+		printf("\n");
 		if(4096 - internalOffset - bytesToRead > 0){ //If segment to read won't go to next block, read everything
 			memcpy(buf + bytesRead, bounce_buffer + internalOffset, bytesToRead); 
+
+			printf("User buffer (first 5 bytes):\n");
+			char *char_buf = (char *)buf;
+			for (int i = 0; i < 5; i++) {
+   				printf("%02X ", (unsigned char)char_buf[i]);
+			}
+			printf("\n");
+
+
 			break;	//Exit loop since we finished reading the segment to read
 		}
 		else{ //Otherwise, if segment to read will go to next block, read however much is left of current block
 			memcpy(buf + bytesRead, bounce_buffer + internalOffset, 4096 - internalOffset);
 			bytesRead += 4096 - internalOffset;
-			bytesToRead -= bytesRead;
+			bytesToRead -= 4096 - internalOffset;
 			internalOffset = 0;
 			blockIndex = FATArray[blockIndex];
 		}
 	}
 
 	fdArray[fd].offset += count;
+	printf("New file offset: %d\n", fdArray[fd].offset);
 	return count;
 
 }
