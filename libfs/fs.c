@@ -484,7 +484,6 @@ int fs_write(int fd, void *buf, size_t count)
 	fdArray[fd].offset += bytesWritten;
 	fdArray[fd].fileSize = (fdArray[fd].offset > fdArray[fd].fileSize) ? fdArray[fd].offset : fdArray[fd].fileSize; // max(fdArray[fd].offset, fdArray[fd].fileSize). offset will be greater than orignal fileSize if extended.
 	root_dir[index].file_size = fdArray[fd].fileSize;
-	printf("file: %s, size: %u, data_blk: %u\n", root_dir[index].filename, root_dir[index].file_size, root_dir[index].first_data_block_idx);
 	return bytesWritten;
 }
 

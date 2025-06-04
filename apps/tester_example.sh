@@ -69,19 +69,20 @@ for script in scripts/*.script; do
     echo "Running $script"
     dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
     ./fs_make.x test.fs 100 > /dev/null 2>&1
-    ./test_fs.x script test.fs $script > /dev/null 2>&1
+    ./test_fs.x script test.fs $script > my_script_ouput
     ./test_fs.x info test.fs > my_output_info
     ./test_fs.x ls test.fs > my_output_ls
     rm test_file test.fs
 
     dd if=/dev/urandom of=test_file bs=4096 count=1 > /dev/null 2>&1
     ./fs_make.x test.fs 100 > /dev/null 2>&1
-    ./fs_ref.x script test.fs $script > /dev/null 2>&1
+    ./fs_ref.x script test.fs $script > ref_script_ouput
     ./fs_ref.x info test.fs > ref_output_info
     ./fs_ref.x ls test.fs > ref_output_ls
     rm test_file test.fs
 
+    diff my_script_ouput ref_script_ouput
     diff my_output_info ref_output_info
     diff my_output_ls ref_output_ls
-    rm my_output_info ref_output_info my_output_ls ref_output_ls
+    rm my_script_ouput ref_script_ouput my_output_info ref_output_info my_output_ls ref_output_ls
 done
