@@ -86,4 +86,3 @@ for script in scripts/*.script; do
     diff my_output_ls ref_output_ls
     rm my_script_ouput ref_script_ouput my_output_info ref_output_info my_output_ls ref_output_ls
 done
-

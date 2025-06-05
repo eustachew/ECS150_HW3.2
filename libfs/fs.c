@@ -467,12 +467,13 @@ int fs_write(int fd, void *buf, size_t count)
 			bytesWritten += bytesToWriteInBlock;
 			bytesLeftToWrite -= bytesToWriteInBlock;
 			internalOffset = 0;
-			if(FATArray[blockIndex] == FAT_EOC){ // in the case of when offset is at beginning of new block (4096 for example)
+			if(FATArray[blockIndex] == FAT_EOC){
 				emptyIndex = getEmptyFATIndex();
 				if(emptyIndex == FAT_EOC){ // unable to extend bc no empty blocks available
 					break;
 				}
 				FATArray[blockIndex] = emptyIndex;
+				FATArray[emptyIndex] = FAT_EOC;
 			}
 			blockIndex = FATArray[blockIndex];
 		}
