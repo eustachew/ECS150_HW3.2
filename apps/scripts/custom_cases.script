@@ -1,0 +1,62 @@
+# Mount before doing anything
+MOUNT
+
+# Try to read/write with no open files
+READ 5 DATA dummy
+WRITE DATA abcde
+
+# Create a file and write exactly one block (4096 bytes)
+CREATE bigfile
+OPEN bigfile
+WRITE DATA $(head -c 4096 < /dev/zero | tr '\0' 'X')
+SEEK 4096
+READ 5 DATA XXXXX
+
+# Seek beyond file size and try to read (should read nothing or fail gracefully)
+SEEK 8192
+READ 10 DATA -----
+
+# Write at offset beyond EOF (seek to 8192, then write 5 bytes)
+SEEK 8192
+WRITE DATA HELLO
+SEEK 4096
+READ 5 DATA XXXXX
+SEEK 8192
+READ 5 DATA HELLO
+
+# Attempt to create the same file again (should fail)
+CREATE bigfile
+
+# Close the file and then try writing again
+CLOSE
+WRITE DATA BYEEE
+
+# Open, close, then close again (should handle double close gracefully)
+OPEN bigfile
+CLOSE
+CLOSE
+
+# Delete open file (should fail if open)
+OPEN bigfile
+DELETE bigfile
+CLOSE
+DELETE bigfile
+
+# Try opening a deleted file
+OPEN bigfile
+
+# Create files until root directory is full (128 entries)
+CREATE base
+OPEN base
+SEEK 0
+WRITE DATA AAAAA
+CLOSE
+$(for i in $(seq -w 1 127); do echo CREATE file$i; done)
+
+# Attempt to create the 129th file (should fail)
+CREATE file129
+
+# UMOUNT and try to do file operations (should fail gracefully)
+UMOUNT
+CREATE test_after_umount
+OPEN test_after_umount
