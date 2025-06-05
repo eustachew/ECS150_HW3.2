@@ -12,6 +12,7 @@
 #define FILE_ENTRY_SIZE 32
 
 bool mounted = false;
+int testCounter = 1;
 
 struct superblock{
 	char signature[9]; //8 bytes for the signature, plus extra byte for null terminator
@@ -121,6 +122,7 @@ int fs_mount(const char *diskname)
 int fs_umount(void)
 {
 	/* TODO */
+
 	// copy FAT array back into disk
 	uint8_t buffer[BLOCK_SIZE];
 	for(int i = 0; i < Block.numFATBlocks; i++){
@@ -138,6 +140,11 @@ int fs_umount(void)
 		return -1;
 	}
 	mounted = false;
+	for(int i = 0; i < FS_OPEN_MAX_COUNT; i++){ 
+			if(fdArray[i].isOpen == true){ //check to see if file descriptor is still open
+				return -1;
+			}
+	}
 	return 0;
 }
 
@@ -290,13 +297,13 @@ int fs_open(const char *filename)
 	}
 
 	for(int i = 0; i < FS_FILE_MAX_COUNT; i++){
-		if(strcmp((char*)root_dir[i].filename, filename) == 0){
+		if(strcmp((char*)root_dir[i].filename, filename) == 0){ //check to see if file exists in directory
+			//printf("Open Attempt %d\n", testCounter++);
 			struct openFile newFile;
 			strncpy(newFile.filename, filename, 16);
 			newFile.fileSize = root_dir[i].file_size;
 			newFile.dataIndex = root_dir[i].first_data_block_idx;
 			newFile.offset = 0;
-
 			for(int i = 0; i < FS_OPEN_MAX_COUNT; i++){  //find the first open entry in the fd array to assign fd
 				if(fdArray[i].isOpen == false){ //check to see if the entry is unused, if so then fill it in with the corresponding info
 					fdArray[i] = newFile;
@@ -450,7 +457,6 @@ int fs_write(int fd, void *buf, size_t count)
 		}
 		blockIndex = FATArray[blockIndex];
 	}
-
 	while(bytesLeftToWrite > 0){
 		block_read(dataBlockStartIndex + blockIndex, bounce_buffer);
 		if(BLOCK_SIZE - internalOffset >= bytesLeftToWrite){ // last block to write
@@ -505,10 +511,10 @@ int fs_read(int fd, void *buf, size_t count)
 		count = fdArray[fd].fileSize - fdArray[fd].offset;
 	}
 
-	int bytesToRead = count;
+	uint16_t bytesToRead = count;
 	int blockOffset = fdArray[fd].offset / 4096; //Offset within the array of data blocks that make up the file
 	int internalOffset = fdArray[fd].offset % 4096; //Offset within the current block
-	int bytesRead = 0; //Tracking how many bytes to read so we can use as offset into buf when using memcpy
+	uint16_t bytesRead = 0; //Tracking how many bytes to read so we can use as offset into buf when using memcpy
 	int blockIndex = fdArray[fd].dataIndex; //index of the block we are going to read from
 
 	//Iterate through the FAT array until we are positioned at the right index 
@@ -520,13 +526,13 @@ int fs_read(int fd, void *buf, size_t count)
 	while(bytesToRead > 0 && blockIndex != FAT_EOC){
 		block_read(blockIndex + Block.dataIndex, bounce_buffer);
 		if(4096 - internalOffset - bytesToRead > 0){ //If segment to read won't go to next block, read everything
-			memcpy(buf + bytesRead, bounce_buffer + internalOffset, bytesToRead); 
+			memcpy(buf + bytesRead, bounce_buffer + internalOffset, bytesToRead);
 			break;	//Exit loop since we finished reading the segment to read
 		}
 		else{ //Otherwise, if segment to read will go to next block, read however much is left of current block
 			memcpy(buf + bytesRead, bounce_buffer + internalOffset, 4096 - internalOffset);
 			bytesRead += 4096 - internalOffset;
-			bytesToRead -= bytesRead;
+			bytesToRead -= 4096 - internalOffset;
 			internalOffset = 0;
 			blockIndex = FATArray[blockIndex];
 		}

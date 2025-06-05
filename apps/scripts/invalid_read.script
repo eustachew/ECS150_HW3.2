@@ -1,0 +1,6 @@
+MOUNT
+CREATE	oneblock
+OPEN	oneblock
+DELETE	oneblock
+CLOSE
+DELETE	oneblock
