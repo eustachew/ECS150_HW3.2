@@ -81,13 +81,26 @@ for script in scripts/*.script; do
     ./fs_ref.x ls test.fs > ref_output_ls
     rm test_file test.fs
 
-    echo "My output vs reference output"
-    diff my_script_ouput ref_script_ouput
-    echo "My script errors vs reference script error"
-    diff my_script_err ref_script_err
-    echo "My info vs reference info"
-    diff my_output_info ref_output_info
-    echo "My ls vs reference ls"
-    diff my_output_ls ref_output_ls
+
+    if [ "$(cat my_script_ouput)" != "$(cat ref_script_ouput)" ]; then
+        echo "Script outputs don't match..."
+        diff -u my_script_ouput ref_script_ouput
+    fi
+
+    if [ "$(cat my_script_err)" != "$(cat ref_script_err)" ]; then
+        echo "Script errors don't match..."
+        diff -u my_script_err ref_script_err
+    fi
+
+    if [ "$(cat my_output_info)" != "$(cat ref_output_info)" ]; then
+        echo "Disk info don't match..."
+        diff -u my_output_info ref_output_info
+    fi
+
+    if [ "$(cat my_output_ls)" != "$(cat ref_output_ls)" ]; then
+        echo "Disk ls don't match..."
+        diff -u my_output_ls ref_output_ls
+    fi
+
     rm my_script_ouput ref_script_ouput my_output_info ref_output_info my_output_ls ref_output_ls my_script_err ref_script_err
 done

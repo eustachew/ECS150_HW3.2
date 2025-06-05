@@ -1,0 +1,19 @@
+MOUNT
+CREATE  testfile
+OPEN    testfile
+WRITE   FILE    testfile
+WRITE   FILE    test_fs.c
+CLOSE
+
+OPEN    testfile
+WRITE   DATA    abc
+CLOSE
+
+OPEN    testfile
+READ    1   DATA    a
+READ    1   DATA    b
+READ    1   DATA    c
+SEEK	4096
+READ    99999999999999  FILE    test_fs.c
+CLOSE
+UMOUNT
