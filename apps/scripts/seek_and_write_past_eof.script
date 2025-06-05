@@ -1,0 +1,8 @@
+MOUNT
+CREATE  testfile
+OPEN    testfile
+WRITE	FILE	test_file
+SEEK	4096
+WRITE   DATA    abcde
+READ	5	DATA	abcde
+UMOUNT

@@ -81,8 +81,11 @@ for script in scripts/*.script; do
     ./fs_ref.x ls test.fs > ref_output_ls
     rm test_file test.fs
 
+    echo "My output vs reference output"
     diff my_script_ouput ref_script_ouput
+    echo "My info vs reference info"
     diff my_output_info ref_output_info
+    echo "My ls vs reference ls"
     diff my_output_ls ref_output_ls
     rm my_script_ouput ref_script_ouput my_output_info ref_output_info my_output_ls ref_output_ls
 done
