@@ -12,6 +12,7 @@
 #define FILE_ENTRY_SIZE 32
 
 bool mounted = false;
+int testCounter = 1;
 
 struct superblock{
 	char signature[9]; //8 bytes for the signature, plus extra byte for null terminator
@@ -121,6 +122,7 @@ int fs_mount(const char *diskname)
 int fs_umount(void)
 {
 	/* TODO */
+
 	// copy FAT array back into disk
 	uint8_t buffer[BLOCK_SIZE];
 	for(int i = 0; i < Block.numFATBlocks; i++){
@@ -138,6 +140,11 @@ int fs_umount(void)
 		return -1;
 	}
 	mounted = false;
+	for(int i = 0; i < FS_OPEN_MAX_COUNT; i++){ 
+			if(fdArray[i].isOpen == true){ //check to see if file descriptor is still open
+				return -1;
+			}
+	}
 	return 0;
 }
 
@@ -290,13 +297,13 @@ int fs_open(const char *filename)
 	}
 
 	for(int i = 0; i < FS_FILE_MAX_COUNT; i++){
-		if(strcmp((char*)root_dir[i].filename, filename) == 0){
+		if(strcmp((char*)root_dir[i].filename, filename) == 0){ //check to see if file exists in directory
+			//printf("Open Attempt %d\n", testCounter++);
 			struct openFile newFile;
 			strncpy(newFile.filename, filename, 16);
 			newFile.fileSize = root_dir[i].file_size;
 			newFile.dataIndex = root_dir[i].first_data_block_idx;
 			newFile.offset = 0;
-
 			for(int i = 0; i < FS_OPEN_MAX_COUNT; i++){  //find the first open entry in the fd array to assign fd
 				if(fdArray[i].isOpen == false){ //check to see if the entry is unused, if so then fill it in with the corresponding info
 					fdArray[i] = newFile;
