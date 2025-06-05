@@ -12,7 +12,6 @@
 #define FILE_ENTRY_SIZE 32
 
 bool mounted = false;
-int testCounter = 1;
 
 struct superblock{
 	char signature[9]; //8 bytes for the signature, plus extra byte for null terminator
@@ -47,7 +46,6 @@ struct superblock Block;
 
 int fs_mount(const char *diskname)
 {
-	/* TODO */
 	uint8_t buffer[BLOCK_SIZE];
 
 	if (block_disk_open(diskname) == -1) {
@@ -121,8 +119,6 @@ int fs_mount(const char *diskname)
 
 int fs_umount(void)
 {
-	/* TODO */
-
 	// copy FAT array back into disk
 	uint8_t buffer[BLOCK_SIZE];
 	for(int i = 0; i < Block.numFATBlocks; i++){
@@ -136,21 +132,20 @@ int fs_umount(void)
 	if(block_write(Block.rootIndex, root_dir) != 0){
 		return -1;
 	}
+	for(int i = 0; i < FS_OPEN_MAX_COUNT; i++){ 
+		if(fdArray[i].isOpen == true){ //check to see if file descriptor is still open
+			return -1;
+		}
+	}
 	if(block_disk_close() != 0){
 		return -1;
 	}
 	mounted = false;
-	for(int i = 0; i < FS_OPEN_MAX_COUNT; i++){ 
-			if(fdArray[i].isOpen == true){ //check to see if file descriptor is still open
-				return -1;
-			}
-	}
 	return 0;
 }
 
 int fs_info(void)
 {
-	/* TODO */
 	uint16_t fat_free_count = 0;
 	for (int i = 0; i < Block.numDataBlocks; i++) {	
 		if (FATArray[i] == 0) {
@@ -180,7 +175,6 @@ int fs_info(void)
 
 int fs_create(const char *filename)
 {
-	/* TODO: Phase 2 */
 	// Check if FS is mounted
 	if(!mounted){
 		return -1;
@@ -214,7 +208,6 @@ int fs_create(const char *filename)
 
 int fs_delete(const char *filename)
 {
-	/* TODO: Phase 2 */
 	// Check if FS is mounted
 	if(!mounted){
 		return -1;
@@ -284,7 +277,6 @@ int fs_ls(void)
 
 int fs_open(const char *filename)
 {
-	/* TODO: Phase 3 */
 	//Exit if filestystem not mounted
 	if(!mounted){
 		return -1;
@@ -298,7 +290,6 @@ int fs_open(const char *filename)
 
 	for(int i = 0; i < FS_FILE_MAX_COUNT; i++){
 		if(strcmp((char*)root_dir[i].filename, filename) == 0){ //check to see if file exists in directory
-			//printf("Open Attempt %d\n", testCounter++);
 			struct openFile newFile;
 			strncpy(newFile.filename, filename, 16);
 			newFile.fileSize = root_dir[i].file_size;
@@ -339,12 +330,10 @@ int fs_close(int fd)
 	}
 	
 	return 0;
-	/* TODO: Phase 3 */
 }
 
 int fs_stat(int fd)
 {
-	/* TODO: Phase 3 */
 	//Exit if filestystem not mounted
 	if(!mounted){
 		return -1;
@@ -362,7 +351,6 @@ int fs_stat(int fd)
 
 int fs_lseek(int fd, size_t offset)
 {
-	/* TODO: Phase 3 */
 	//Exit if filestystem not mounted
 	if(!mounted){
 		return -1;
@@ -394,7 +382,6 @@ uint16_t getEmptyFATIndex(){
 
 int fs_write(int fd, void *buf, size_t count)
 {
-	/* TODO: Phase 4 */
 	if(!mounted){
 		return -1;
 	}
@@ -493,7 +480,6 @@ int fs_write(int fd, void *buf, size_t count)
 
 int fs_read(int fd, void *buf, size_t count)
 {
-	/* TODO: Phase 4 */
 	if(fdArray[fd].isOpen == false){ //fd entry has no corresponding file
 		return -1;
 	}
